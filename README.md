@@ -1,44 +1,62 @@
+<div align="center">
+
 # SatMend
 
-[中文文档](README.zh-CN.md) · [Quick start](#quick-start) · [MIT License](LICENSE)
+**Software Recovery for Satellite Constellations with Intermittent Ground Contact**
 
-![SatMend scenario showing ground contact, onboard software versions, and recovery through a gateway satellite](assets/background.jpg)
+[![Python 3.9+](https://img.shields.io/badge/Python-3.9%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![MIT License](https://img.shields.io/badge/License-MIT-3D7458)](LICENSE)
 
-*Ground maintenance reaches applications on multiple satellites through a gateway and scheduled contact windows.*
+**English · [简体中文](README.zh-CN.md)**
 
-A constellation may run several versions of the same software component across cooperating satellites. When a fault interrupts a service, maintainers need to prepare a compatible repair, deliver it through limited contacts, and verify that the target has recovered before the maintenance deadline. A healthy application can also lose service when its upstream dependency fails.
+[Quick start](#quick-start) · [Method](#how-satmend-works) · [Simulator](#configure-the-simulator)
 
-SatMend provides a discrete-event simulator and a reference maintenance workflow. Use it to compare contact calendars, link capacities, deployment layouts, candidate release times, and recovery strategies on scenarios you define. The simulator reports when applications recover, when dependent services become available, and when confirmation reaches the ground.
+</div>
 
-## Method
+<p align="center"><img src="assets/background.jpg" width="720" alt="Ground maintenance reaches different onboard software versions through intermittent contact and a gateway satellite"></p>
+<p align="center"><sub>One maintenance window can serve applications on several satellites through a common gateway.</sub></p>
 
-![SatMend workflow for cross-version sessions, per-version validation, and timely delivery](assets/method.jpg)
+## Why SatMend?
 
-*SatMend groups related versions into ground repair sessions, validates each version separately, and submits each candidate when ready.*
+Satellite constellations can run multiple versions of the same component while depending on services across spacecraft. When an application fails, a repair must reach the right version through a limited contact window and pass verification at the target. A healthy application can also lose service when an upstream dependency fails.
 
-The [reference planner](satmend/method.py) groups affected versions by component and assigns each group to a repair slot. It models the reuse of diagnostic work across versions, evaluates each code version separately, and emits timed actions for code delivery or state recovery. The [simulator](satmend/simulator.py) executes those actions through a shared model of uplink, gateway staging, crosslink forwarding, activation, verification, and receipts. An `Assessment` callback supplies scenario-specific validation outcomes and costs. You can also provide a complete action sequence from your own planner.
+**SatMend coordinates repair preparation on the ground with recovery onboard.** This repository lets you model that process and compare your own maintenance strategies.
+
+- **Discrete-event simulator** for intermittent links, resumable transfers, gateway forwarding, and dependent services.
+- **Reference planner** for cross-version repair sessions, separate validation, and delivery as candidates become ready.
+- **Scenario inputs and result traces** for configuring experiments and inspecting target recovery, service availability, and ground receipts.
 
 ## Quick start
 
-Clone the repository and run the example with Python 3.9 or later. The simulator uses the Python standard library.
+### Get the example
+
+Use Python 3.9 or newer. The example runs with the standard library.
 
 ```bash
 git clone https://github.com/luopeng69131/SatMend.git
 cd SatMend
 mkdir -p outputs
-python3 -m satmend prepare examples/scenario.json \
-  --contacts examples/ground_contacts.csv --output outputs/scenario.json
-python3 -m satmend run outputs/scenario.json --output outputs/result.json
+```
+
+### Run the simulator
+
+```bash
+python3 -m satmend run examples/scenario.json \
+  --contacts examples/ground_contacts.csv \
+  --output outputs/result.json
 python3 -c 'import json; print(json.load(open("outputs/result.json"))["summary"])'
 ```
 
-The example has three satellites and two ground contacts. The gateway recovers first. Two replicas then finish verification during the disconnection, and their receipts reach the ground at the next contact. A later version's partial uplink resumes with 20 bytes remaining.
+In the three-satellite example, the gateway recovers first. Two payload replicas complete onboard verification during the contact gap, and the ground receives their confirmations after contact resumes.
 
-```text
-{'deadline_s': 22.0, 'faulty_applications': 4, 'recovered_applications': 4, 'affected_services': 5, 'restored_services': 5, 'mean_service_outage_s': 10.14}
-```
+| Example outcome at 22 s | Result |
+| --- | ---: |
+| Faulty applications recovered | **4 / 4** |
+| Affected services restored | **5 / 5** |
+| Mean outage across affected services | **10.14 s** |
 
-To install the `satmend` command and Python package in a virtual environment:
+<details>
+<summary><b>Install the satmend command</b></summary>
 
 ```bash
 python3 -m venv .venv
@@ -47,26 +65,53 @@ python -m pip install .
 satmend --help
 ```
 
-## Configure an experiment
+</details>
 
-Copy [the scenario JSON](examples/scenario.json) and adjust the fields below. Time is in seconds and link rates are in bytes per second.
+## How SatMend works
 
-| Input | What it controls |
+<p align="center"><img src="assets/method.jpg" width="720" alt="SatMend framework showing cross-version repair sessions, separate validation, and timely delivery"></p>
+
+1. **Organize repair sessions by component.** Assign related versions to the same ground repair slot so diagnostic context can carry over.
+2. **Validate each version separately.** Set the validation time and result for each version, then emit an action when it is ready. State recovery actions carry commands.
+3. **Deliver and verify.** Stage candidates and commands at the gateway as contact permits, forward them to compatible targets, and record onboard verification and ground receipts.
+
+The [reference planner](satmend/method.py) models preparation and validation timing. The [simulator](satmend/simulator.py) models delivery, activation, and target verification using configured durations and outcomes.
+
+## Configure the simulator
+
+Start with the [scenario JSON](examples/scenario.json) and the [contact CSV](examples/ground_contacts.csv). Times are in seconds and link rates are in bytes per second.
+
+| Change | Where |
 | --- | --- |
-| `deadline_s`, `ground_contacts` | Experiment horizon and ground contact windows |
-| `gateway_satellite`, `gateway_app`, `crosslink_contacts` | Gateway placement, forwarding health, and optional visibility windows per destination satellite |
-| `*_bytes_per_s`, `command_bytes`, `receipt_bytes` | Ground uplink and downlink capacity, one shared crosslink capacity, and control-message sizes |
-| `applications` | Satellite, component, version, initial fault, upstream application IDs, package size, activation time, and verification time |
-| `--slots`, `--diagnosis-s`, `--reuse-diagnosis-s`, `--validation-s`, `--state-recovery-s` | Reference planner's concurrency and timing |
-| `--actions` | A JSON array of explicit actions. Use `planned_actions` from a result file as a template. |
+| Deadline and ground contacts | `deadline_s`, `ground_contacts`, or `--contacts` |
+| Gateway, crosslink availability, and link capacities | `gateway_satellite`, `gateway_app`, `crosslink_contacts`, and `*_bytes_per_s` |
+| Application placement, versions, faults, and service dependencies | `applications` |
+| Package and control-message sizes, activation and verification times | Application `package_bytes`, `activation_s`, and `verification_s`; scenario `command_bytes` and `receipt_bytes` |
+| Ground repair slots and preparation times | `--slots`, `--diagnosis-s`, `--reuse-diagnosis-s`, `--validation-s`, and `--state-recovery-s` |
 
-The [data loader](satmend/scenario.py) validates IDs, the dependency graph, times, and capacities. It sorts and merges contacts, and the `prepare` command writes the normalized scenario. An optional CSV with `start_s,end_s` columns replaces the JSON ground calendar. For crosslinks, an omitted destination has continuous visibility when the gateway is healthy, and an empty list gives that destination no visibility. Set each code fault's `package_bytes` to a positive integer.
+<details>
+<summary><b>Prepare scenario data and model contact windows</b></summary>
 
-Ground transfers can run inside contact windows and resume with their remaining bytes. A package staged at the gateway can proceed to a target while ground contact is unavailable. The simulator caches each compatible code package once at the gateway and schedules per-target delivery over a shared crosslink that requires healthy forwarding. It models activation and verification with configured durations and outcomes. A verified result at the deadline counts as recovered.
+```bash
+python3 -m satmend prepare examples/scenario.json \
+  --contacts examples/ground_contacts.csv \
+  --output outputs/scenario.json
+```
 
-The result JSON contains `summary`, per-target `applications`, individual `jobs`, `pending_transfers`, timestamped `events`, and the input `planned_actions`. Recovery time, ground receipt time, and dependent service availability are separate. Mean service outage is computed over services affected at the start, with an unrestored service contributing the full experiment duration.
+The optional CSV supplies `start_s,end_s` and replaces the ground calendar in the JSON. The [loader](satmend/scenario.py) checks identifiers, times, capacities, and acyclic dependencies, then sorts and merges contact windows. An omitted crosslink destination has continuous visibility while the gateway forwards. An explicit empty list gives that destination no visibility. A code fault takes a positive `package_bytes`.
 
-## Use from Python
+Ground transfers can resume from their remaining bytes. Once a package and its command reach the gateway, forwarding can proceed during a ground contact gap. The gateway caches each compatible package and delivers to each target over the shared crosslink. A successful check exactly at the deadline counts as recovered.
+
+</details>
+
+The result JSON includes `summary`, per-target `applications`, individual `jobs`, `pending_transfers`, timestamped `events`, and `planned_actions`. Target recovery, dependent service availability, and ground confirmation have separate timestamps. A service that remains unavailable contributes the full experiment duration to mean outage.
+
+## Use your own planner
+
+Pass your action sequence with `--actions path/to/actions.json`. The `planned_actions` array from an example run is a starting template. To test the reference planner with different per-version costs or verification outcomes, supply an `Assessment` callback.
+
+<details>
+<summary><b>Python example</b></summary>
 
 ```python
 from satmend import Assessment, load_scenario, plan_sessions, simulate
@@ -77,10 +122,11 @@ def assess(component, version, targets):
     return Assessment(validated=True, verification_passes=True, duration_s=1.5)
 
 actions = plan_sessions(scenario, slots=2, assess=assess)
-report = simulate(scenario, actions)
-print(report["summary"])
+print(simulate(scenario, actions)["summary"])
 ```
 
-Set the callback to model validation costs and outcomes for each code version, or construct `Action` objects directly to compare maintenance policies. A code action supplies its ready time, target IDs, component, version, candidate ID, package size, and check outcomes. A state action supplies its ready time and target IDs. See the [action and planner definitions](satmend/method.py) for defaults.
+Code actions specify ready time, targets, component, version, candidate ID, package size, and check outcomes. State actions specify ready time and targets. See the [Action and Assessment definitions](satmend/method.py).
 
-The code, documentation, synthetic examples, and project illustrations are available under the [MIT License](LICENSE). [Asset sources](ASSET_SOURCES.md)
+</details>
+
+[MIT License](LICENSE) · [Asset sources](ASSET_SOURCES.md)
