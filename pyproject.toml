@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "satmend"
+version = "0.1.0"
+description = "A configurable simulator and reference workflow for constellation software recovery"
+readme = "README.md"
+requires-python = ">=3.9"
+license = {file = "LICENSE"}
+dependencies = []
+
+[project.scripts]
+satmend = "satmend.__main__:main"
+
+[project.urls]
+Repository = "https://github.com/luopeng69131/SatMend"
+
+[tool.setuptools]
+packages = ["satmend"]

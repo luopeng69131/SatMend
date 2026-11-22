@@ -1,0 +1,37 @@
+{
+  "title": "Three-satellite maintenance",
+  "deadline_s": 22,
+  "gateway_satellite": "s0",
+  "gateway_app": "relay",
+  "ground_contacts": [[0, 6], [14, 22]],
+  "uplink_bytes_per_s": 100,
+  "downlink_bytes_per_s": 30,
+  "crosslink_bytes_per_s": 60,
+  "command_bytes": 20,
+  "receipt_bytes": 12,
+  "applications": [
+    {
+      "id": "relay", "satellite": "s0", "component": "forwarding", "version": "v1",
+      "fault": "state", "activation_s": 0.5, "verification_s": 0.5
+    },
+    {
+      "id": "payload-a", "satellite": "s1", "component": "payload", "version": "v1",
+      "fault": "code", "dependencies": ["relay"],
+      "package_bytes": 150, "activation_s": 0.5, "verification_s": 0.5
+    },
+    {
+      "id": "payload-b", "satellite": "s2", "component": "payload", "version": "v1",
+      "fault": "code", "dependencies": ["relay"],
+      "package_bytes": 150, "activation_s": 0.5, "verification_s": 0.5
+    },
+    {
+      "id": "payload-next", "satellite": "s2", "component": "payload", "version": "v2",
+      "fault": "code", "dependencies": ["relay"],
+      "package_bytes": 120, "activation_s": 0.5, "verification_s": 0.5
+    },
+    {
+      "id": "telemetry", "satellite": "s2", "component": "telemetry", "version": "v1",
+      "fault": "healthy", "dependencies": ["payload-b"]
+    }
+  ]
+}
